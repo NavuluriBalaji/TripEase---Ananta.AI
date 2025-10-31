@@ -23,6 +23,9 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Sparkles, MapPin, CalendarDays, Wallet, Feather } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 export const formSchema = z.object({
   destination: z.string().min(2, { message: 'Destination must be at least 2 characters.' }),
@@ -30,14 +33,21 @@ export const formSchema = z.object({
   budget: z.coerce.number().min(1, { message: 'Budget must be a positive number.' }),
   travelStyle: z.string({ required_error: 'Please select a travel style.' }),
   preferences: z.string().min(10, { message: 'Preferences must be at least 10 characters.' }),
-});
+  checkInDate: z.date().optional(),
+  checkOutDate: z.date().optional(),
+}).refine((data) => {
+  if (data.checkInDate && data.checkOutDate) {
+    return data.checkOutDate >= data.checkInDate;
+  }
+  return true;
+}, { message: 'Check-out must be the same or after check-in', path: ['checkOutDate'] });
 
 type ItineraryFormProps = {
   onSubmit: (values: z.infer<typeof formSchema>) => void;
   isLoading: boolean;
 };
 
-const travelStyles = ['Adventurous', 'Relaxed', 'Luxury', 'Backpacking', 'Family', 'Cultural'];
+const travelStyles = ['Adventurous', 'Relaxed', 'Luxury', 'Mid-range', 'Backpacking', 'Family', 'Cultural'];
 
 export function ItineraryForm({ onSubmit, isLoading }: ItineraryFormProps) {
   const form = useForm<z.infer<typeof formSchema>>({
@@ -48,6 +58,8 @@ export function ItineraryForm({ onSubmit, isLoading }: ItineraryFormProps) {
       budget: 1500,
       travelStyle: 'Cultural',
       preferences: 'I love ancient temples, trying authentic matcha, and staying in quiet, traditional ryokans.',
+      checkInDate: undefined,
+      checkOutDate: undefined,
     },
   });
 
@@ -94,7 +106,75 @@ export function ItineraryForm({ onSubmit, isLoading }: ItineraryFormProps) {
                 )}
               />
             </div>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="checkInDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Check-in</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'pl-3 text-left font-normal',
+                              !field.value && 'text-muted-foreground'
+                            )}
+                          >
+                            {field.value ? field.value.toDateString() : 'Pick a date'}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="checkOutDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Check-out</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'pl-3 text-left font-normal',
+                              !field.value && 'text-muted-foreground'
+                            )}
+                          >
+                            {field.value ? field.value.toDateString() : 'Pick a date'}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="budget"

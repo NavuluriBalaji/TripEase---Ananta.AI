@@ -18,6 +18,8 @@ const GeneratePersonalizedItineraryInputSchema = z.object({
   travelStyle: z.string().describe('The user travel style, e.g., adventurous, relaxed, luxury.'),
   destination: z.string().describe('The destination for the trip.'),
   duration: z.number().describe('The duration of the trip in days.'),
+  checkInDate: z.string().optional().describe('Optional check-in date (ISO or human-readable).'),
+  checkOutDate: z.string().optional().describe('Optional check-out date (ISO or human-readable).'),
 });
 export type GeneratePersonalizedItineraryInput = z.infer<typeof GeneratePersonalizedItineraryInputSchema>;
 
@@ -40,6 +42,8 @@ const prompt = ai.definePrompt({
 User Preferences: {{{preferences}}}
 Budget (USD): {{{budget}}}
 Travel Style: {{{travelStyle}}}
+Check-in: {{{checkInDate}}}
+Check-out: {{{checkOutDate}}}
 
 Provide a detailed itinerary and the estimated total price for the trip.
 
