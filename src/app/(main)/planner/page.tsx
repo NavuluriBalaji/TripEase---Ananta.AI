@@ -110,44 +110,107 @@ export default function PlannerPage() {
   }
 
   return (
-    <div className="container mx-auto py-10 space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Trip Planner</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Describe your trip..." />
-            <Button onClick={analyze} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plane className="mr-2 h-4 w-4" />}
-              Analyze
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Input placeholder="Origin city (e.g., Hyderabad)" onChange={e => setAnswers(a => ({ ...a, origin: e.target.value }))} />
-            <Input placeholder="Travelers (e.g., 2)" onChange={e => setAnswers(a => ({ ...a, travelers: e.target.value }))} />
-          </div>
-          {questions.length > 0 && (
-            <div className="space-y-3">
-              {questions.map((q) => (
-                <div key={q} className="flex items-center gap-2">
-                  <div className="min-w-60 text-sm text-muted-foreground">{q}</div>
-                  <Input onChange={e => setAnswers(a => ({ ...a, [normalizeKey(q)]: e.target.value }))} />
-                </div>
-              ))}
+    <div className="flex-1 overflow-auto bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Plan Your Trip</h1>
+          <p className="text-gray-600">Let AI help you create the perfect itinerary</p>
+        </div>
+
+        {/* Main Card */}
+        <Card className="bg-white border-gray-200 shadow-sm">
+          <CardHeader className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <CardTitle className="text-xl text-gray-900">Trip Planning Assistant</CardTitle>
+          </CardHeader>
+          <CardContent className="p-8 space-y-6">
+            {/* Query Input */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-900">Describe Your Trip</label>
               <div className="flex gap-2">
-                <Button onClick={plan} disabled={loading}>Plan Trip</Button>
-                <Button variant="secondary" onClick={mockPay}>Mock Payment (optional)</Button>
+                <Input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="e.g., Plan my 5-day trip to Bali. I love beaches, seafood, and sunsets."
+                  className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                />
+                <Button onClick={analyze} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white min-w-max">
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plane className="mr-2 h-4 w-4" />}
+                  Analyze
+                </Button>
               </div>
             </div>
-          )}
-          {summary && (
-            <div className="prose dark:prose-invert max-w-none">
-              <ReactMarkdown>{summary}</ReactMarkdown>
+
+            {/* Origin and Travelers */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-900">From Where?</label>
+                <Input
+                  placeholder="e.g., Hyderabad"
+                  onChange={e => setAnswers(a => ({ ...a, origin: e.target.value }))}
+                  className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-900">Number of Travelers</label>
+                <Input
+                  placeholder="e.g., 2"
+                  onChange={e => setAnswers(a => ({ ...a, travelers: e.target.value }))}
+                  className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                />
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {/* Follow-up Questions */}
+            {questions.length > 0 && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="font-medium text-gray-900">Help us refine your plan</h3>
+                {questions.map((q, idx) => (
+                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <label className="min-w-48 text-sm text-gray-700 font-medium">{q}</label>
+                    <Input
+                      onChange={e => setAnswers(a => ({ ...a, [normalizeKey(q)]: e.target.value }))}
+                      className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500 sm:flex-1"
+                      placeholder="Enter your answer..."
+                    />
+                  </div>
+                ))}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <Button onClick={plan} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Generate Itinerary
+                  </Button>
+                  <Button variant="secondary" onClick={mockPay} className="border-gray-300 text-gray-900 hover:bg-gray-100">
+                    Mock Payment (Optional)
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Summary / Results */}
+            {summary && (
+              <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h3 className="font-medium text-gray-900">Your Personalized Itinerary</h3>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-gray-800">
+                  <ReactMarkdown>{summary}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {loading && !summary && (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <p className="text-gray-600 text-sm">Creating your perfect trip...</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
