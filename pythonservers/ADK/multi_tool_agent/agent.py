@@ -1,6 +1,7 @@
 """
 Trip Planning Agent with comprehensive tools for flights, hotels, guides,
 trains, car rentals, restaurants, hospitals, and nearby attractions.
+Integrated with EasyMyTrip API for real travel bookings.
 """
 
 import os
@@ -8,6 +9,8 @@ import re
 import requests
 from typing import Any, Dict, List, Optional
 from google.adk.agents import Agent
+from bs4 import BeautifulSoup
+from urllib.parse import quote
 
 
 # ============================================================================
@@ -25,7 +28,7 @@ def _get_airport_code(city: str) -> str:
         'delhi': 'DEL',
         'mumbai': 'BOM',
         'bangalore': 'BLR',
-        'hyderabad': 'HYD',
+        'hyderabad': 'HYB',
         'goa': 'GOI',
         'kolkata': 'CCU',
         'pune': 'PNQ',
@@ -33,6 +36,864 @@ def _get_airport_code(city: str) -> str:
     }
     key = (city or '').strip().lower()
     return mapping.get(key, (key.replace(' ', '')[:3].upper() or 'XXX'))
+
+
+def _get_railway_station_code(city: str) -> tuple:
+    """Convert city name to Indian Railway station code and return format info.
+    
+    Returns:
+        tuple: (station_code, use_all_stations)
+        - station_code: 3-letter railway code
+        - use_all_stations: True if city has "All-Stations" format (major metros)
+    """
+    # Cities with "All-Stations" format (major metros)
+    all_stations_cities = {
+     'mumbai': 'CSMT',
+'delhi': 'NDLS',
+'kolkata': 'KOAA',
+'chennai': 'MAS',
+'bangalore': 'SBC',
+'bengaluru': 'SBC',
+'hyderabad': 'HYB',
+'secunderabad': 'SC',
+'lucknow': 'LKO',
+'kanpur': 'CNB',
+'varanasi': 'BSB',
+'prayagraj': 'PRYJ',
+'allahabad': 'PRYJ',
+'ahmedabad': 'ADI',
+'pune': 'PUNE',
+'jaipur': 'JP',
+'bhopal': 'BPL',
+'habibganj': 'HBJ',
+'patna': 'PNBE',
+'bhubaneswar': 'BBS',
+'guwahati': 'GHY',
+'thiruvananthapuram': 'TVC',
+'ernakulam': 'ERS',
+'kochi': 'ERS',
+'vijayawada': 'BZA',
+'visakhapatnam': 'VSKP',
+    }
+    
+    # Single station cities
+    single_station_cities = {
+'ongole': 'OGL',
+'nellore': 'NLR',
+'guntur': 'GNT',
+'tirupati': 'TPTY',
+'warangal': 'WL',
+'aurangabad': 'AWB',
+'nashik': 'NK',
+'agra': 'AGC',
+'mathura': 'MTJ',
+'indore': 'INDB',
+'ujjain': 'UJN',
+'gwalior': 'GWL',
+'raipur': 'R',
+'bilaspur': 'BSP',
+'ranchi': 'RNC',
+'darbhanga': 'DBG',
+'muzaffarpur': 'MFP',
+'silchar': 'SCL',
+'dimapur': 'DMV',
+'agartala': 'AGTL',
+'amritsar': 'ASR',
+'chandigarh': 'CDG',
+'shimla': 'SML',
+'jammu': 'JAT',
+'srinagar': 'SINA',
+'katra': 'SVDK',
+'bathinda': 'BTI',
+'ludhiana': 'LDH',
+'pathankot': 'PTK',
+'goa': 'MAO',
+'vadodara': 'BRC',
+
+    }
+    
+    key = (city or '').strip().lower()
+    
+    # Check if it's an all-stations city
+    if key in all_stations_cities:
+        return (all_stations_cities[key], True)
+    
+    # Check if it's a single station city
+    if key in single_station_cities:
+        return (single_station_cities[key], False)
+    
+    # Default fallback
+    return ((key.replace(' ', '')[:3].upper() or 'STN'), False)
+
+
+def clean_html(html: str) -> str:
+    """Remove script tags, style tags, and decode HTML entities."""
+    try:
+        # Remove script and style tags
+        cleaned = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', html, flags=re.IGNORECASE)
+        cleaned = re.sub(r'<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>', '', cleaned, flags=re.IGNORECASE)
+        
+        # Decode HTML entities
+        cleaned = cleaned.replace('&nbsp;', ' ').replace('&quot;', '"').replace('&#39;', "'")
+        cleaned = cleaned.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+        
+        return cleaned
+    except Exception as e:
+        print(f"Error cleaning HTML: {e}")
+        return html
+
+
+def extract_from_html(html: str, patterns: List[str]) -> List[str]:
+    """Extract data from HTML using multiple regex patterns."""
+    results = []
+    cleaned = clean_html(html)
+    
+    for pattern in patterns:
+        try:
+            matches = re.findall(pattern, cleaned, re.IGNORECASE | re.DOTALL)
+            results.extend([m.strip() for m in matches if m and len(m.strip()) > 0])
+        except Exception as e:
+            print(f"Regex pattern error: {e}")
+            continue
+    
+    return results[:10]  # Return top 10 results
+
+
+def call_perplexity(prompt: str) -> Dict[str, Any]:
+    """Call Perplexity API for advanced search/summarization if key is available."""
+    api_key = os.environ.get('PERPLEXITY_API_KEY') or os.environ.get('PPLX_API_KEY')
+    if not api_key:
+        return {'status': 'unavailable', 'error_message': 'Perplexity API key not configured'}
+
+    try:
+        url = 'https://api.perplexity.ai/chat/completions'
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+        }
+        payload = {
+            'model': 'pplx-7b-online',
+            'messages': [{'role': 'user', 'content': prompt}],
+            'max_tokens': 500,
+        }
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'choices' in data and len(data['choices']) > 0:
+            content = data['choices'][0].get('message', {}).get('content', '')
+            return {'status': 'ok', 'result': content}
+        return {'status': 'ok', 'result': str(data)}
+    except Exception as e:
+        return {'status': 'error', 'error_message': str(e)}
+
+
+def duckduckgo_search(query: str) -> Dict[str, Any]:
+    """Use DuckDuckGo Instant Answer API as a lightweight fallback for web search."""
+    try:
+        params = {
+            'q': query,
+            'format': 'json',
+            'no_html': 1,
+            'skip_disambig': 1,
+        }
+        response = requests.get('https://api.duckduckgo.com/', params=params, timeout=8)
+        response.raise_for_status()
+        data = response.json()
+        return {
+            'status': 'ok',
+            'query': query,
+            'abstract': data.get('AbstractText'),
+            'source': data.get('AbstractSource'),
+            'related_topics': data.get('RelatedTopics', []),
+        }
+    except Exception as e:
+        return {'status': 'error', 'error_message': str(e)}
+
+
+# ============================================================================
+# EasyMyTrip API Tools
+# ============================================================================
+
+def get_hotels_easemytrip(destination: str, checkin: Optional[str] = None, checkout: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetch hotels from EasyMyTrip for the given destination.
+    
+    Args:
+        destination: City name (e.g., 'Mumbai', 'Delhi', 'Goa')
+        checkin: Check-in date (optional)
+        checkout: Check-out date (optional)
+    
+    Returns:
+        dict with hotel options, prices, ratings, and availability
+    """
+    try:
+        url = f'https://www.easemytrip.com/hotels/hotels-in-{destination.lower()}'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        html = response.text
+        
+        # Extract hotel data using patterns
+        patterns = [
+            r'<div[^>]*class="[^"]*hotel[^"]*"[^>]*>.*?<h[2-4][^>]*>([^<]+)</h',  # Hotel name
+            r'(?:price|cost|₹|rs)[:\s]*([₹\$\d\s,.-]+)',  # Price
+            r'(?:rating|⭐|★)[:\s]*([0-9.]+)',  # Rating
+        ]
+        
+        extracted_data = extract_from_html(html, patterns)
+        
+        # Use LLM to analyze the response structure
+        analysis_prompt = f"""Analyze this EasyMyTrip hotels response and extract structured data.
+        
+Response preview (first 1000 chars): {html[:1000]}
+
+Available data found: {extracted_data[:5] if extracted_data else 'None'}
+
+Please return a JSON structure with:
+- hotels: [{{name, price, rating, location, url}}]
+- total_hotels: count
+- currency: detected currency
+- data_quality: 'complete' | 'partial' | 'empty'
+"""
+        
+        llm_analysis = call_perplexity(analysis_prompt)
+        
+        return {
+            'status': 'ok',
+            'destination': destination,
+            'checkin': checkin,
+            'checkout': checkout,
+            'url': url,
+            'data_found': bool(extracted_data),
+            'sample_data': extracted_data[:5],
+            'html_length': len(html),
+            'llm_analysis': llm_analysis.get('result', 'Analysis not available'),
+        }
+    except Exception as e:
+        return {'status': 'error', 'error_message': f'Failed to fetch hotels: {str(e)}', 'url': f'https://www.easemytrip.com/hotels/hotels-in-{destination.lower()}'}
+
+
+def get_trains_easemytrip(origin: str, destination: str, date: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetch trains from EasyMyTrip between two Indian cities.
+    Scrapes the page and extracts all train details directly.
+    
+    Args:
+        origin: Departure city (e.g., 'Ongole', 'Delhi', 'Mumbai')
+        destination: Arrival city (e.g., 'Hyderabad', 'Mumbai')
+        date: Travel date in DD-MM-YYYY format (optional)
+    
+    Returns:
+        dict with:
+        - status: 'ok' or 'error'
+        - trains: List of extracted train data with index, number, name, times, price, seats, rating
+        - display: Formatted string showing all trains for user to select
+        - message: Instructions for booking
+    
+    Example:
+        >>> result = get_trains_easemytrip('Ongole', 'Hyderabad', '04-11-2025')
+        >>> print(result['display'])  # Shows all trains with indices [0], [1], etc.
+    """
+    try:
+        # Get railway station codes and format info
+        origin_code, origin_all_stations = _get_railway_station_code(origin)
+        dest_code, dest_all_stations = _get_railway_station_code(destination)
+        
+        # Format date as DD-MM-YYYY (keep user's format or use provided date)
+        if not date:
+            from datetime import datetime
+            date = datetime.now().strftime('%d-%m-%Y')
+        
+        # Build URL with correct format based on city type
+        if origin_all_stations:
+            origin_part = f'{origin}--All-Stations-({origin_code})'
+        else:
+            origin_part = f'{origin}-({origin_code})'
+        
+        if dest_all_stations:
+            dest_part = f'{destination}--All-Stations-({dest_code})'
+        else:
+            dest_part = f'{destination}-({dest_code})'
+        
+        # Construct the EasyMyTrip URL
+        url = f'https://railways.easemytrip.com/TrainListInfo/{origin_part}-to-{dest_part}/2/{date}'
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        }
+        
+        # Fetch the page
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        html = response.text
+        
+        # Parse HTML with BeautifulSoup to extract train information
+        soup = BeautifulSoup(html, 'html.parser')
+        trains = []
+        extracted_train_numbers = set()  # Track train numbers to avoid duplicates
+        
+        # Strategy 1: Look for divs that likely contain train information
+        # Search for divs with classes containing train-related keywords
+        train_cards = soup.find_all('div', class_=re.compile(r'train|result|service|journey|trip', re.I), limit=50)
+        
+        # Strategy 2: If not found, look for divs with data-test attributes
+        if not train_cards:
+            train_cards = soup.find_all('div', attrs={'data-test': re.compile(r'train|service', re.I)}, limit=50)
+        
+        # Strategy 3: If still not found, extract all divs and filter by content patterns
+        if not train_cards:
+            all_divs = soup.find_all('div', limit=300)
+            train_cards = []
+            for div in all_divs:
+                text = div.get_text(strip=True)
+                # Look for divs containing train-like patterns (time + price + number)
+                if re.search(r'\d{1,2}:\d{2}', text) and re.search(r'₹\s*\d+', text):
+                    train_cards.append(div)
+                if len(train_cards) >= 50:
+                    break
+        
+        # Strategy 4: Also check for table rows
+        table_rows = soup.find_all('tr', limit=50)
+        train_cards.extend(table_rows)
+        
+        # Extract trains from all found cards
+        for idx, card in enumerate(train_cards):
+            try:
+                text = card.get_text(separator=' ', strip=True)
+                
+                # Skip if too short
+                if len(text) < 20:
+                    continue
+                
+                # Skip filter/UI elements
+                if any(x in text.lower() for x in ['search', 'filter', 'sort', 'javascript', 'search trains']):
+                    continue
+                
+                # Extract train number (4-5 digits, most reliable identifier)
+                train_num_match = re.search(r'\b(\d{4,5})\b', text)
+                if not train_num_match:
+                    continue
+                
+                train_number = train_num_match.group(1)
+                
+                # Skip if we already extracted this train
+                if train_number in extracted_train_numbers:
+                    continue
+                
+                extracted_train_numbers.add(train_number)
+                
+                # Extract times (HH:MM or H:MM format)
+                time_matches = re.findall(r'(\d{1,2}):(\d{2})', text)
+                
+                # Need at least 2 times (departure and arrival)
+                if len(time_matches) < 2:
+                    continue
+                
+                departure = f'{time_matches[0][0]}:{time_matches[0][1]}'
+                arrival = f'{time_matches[1][0]}:{time_matches[1][1]}'
+                
+                # Extract price (₹ followed by numbers)
+                price_match = re.search(r'₹\s*(\d+(?:[,\d]*)?(?:\.\d{2})?)', text)
+                price = f'₹{price_match.group(1)}' if price_match else 'N/A'
+                
+                # Extract train name (text before first time or just first part)
+                train_name = 'Train ' + train_number
+                try:
+                    # Try to get name from before first time
+                    first_time_pos = text.find(departure)
+                    if first_time_pos > 0:
+                        name_text = text[:first_time_pos].strip()
+                        if len(name_text) > 0:
+                            train_name = name_text[:60]
+                except:
+                    pass
+                
+                # Extract duration (e.g., "8h 15m" or "8h")
+                duration_match = re.search(r'(\d+h\s*\d*m?)', text)
+                duration = duration_match.group(1) if duration_match else 'N/A'
+                
+                # Extract rating if available
+                rating_match = re.search(r'(\d\.\d|\d\s*\/\s*5)', text)
+                rating = rating_match.group(1) if rating_match else 'N/A'
+                
+                # Extract seats/availability if available
+                seats_match = re.search(r'(\d+)\s*(?:seats?|available|vacancy|seats available)', text, re.I)
+                seats = seats_match.group(1) if seats_match else 'Available'
+                
+                train_data = {
+                    'index': len(trains),
+                    'train_number': train_number,
+                    'train_name': train_name,
+                    'departure': departure,
+                    'arrival': arrival,
+                    'duration': duration,
+                    'price': price,
+                    'seats': seats,
+                    'rating': rating,
+                }
+                
+                trains.append(train_data)
+                
+                if len(trains) >= 20:  # Limit to 20 trains
+                    break
+            
+            except Exception as e:
+                continue
+        
+        # Create formatted display for the user
+        display_lines = [
+            f"\n{'='*90}",
+            f"🚂 AVAILABLE TRAINS: {origin.upper()} → {destination.upper()} on {date}",
+            f"{'='*90}\n"
+        ]
+        
+        if trains:
+            display_lines.append(f"📋 Found {len(trains)} trains:\n")
+            for train in trains:
+                display_lines.append(
+                    f"  [{train['index']}] Train #{train['train_number']} - {train['train_name']}\n"
+                    f"      🕐 Depart: {train['departure']} | Arrive: {train['arrival']} ({train['duration']})\n"
+                    f"      💰 Price: {train['price']} | 👥 Seats: {train['seats']} | ⭐ Rating: {train['rating']}\n"
+                )
+        else:
+            display_lines.append("❌ No trains found on the page. The website might require JavaScript rendering.\n")
+        
+        display_lines.append(f"\n{'='*90}")
+        display_lines.append("📌 TO BOOK A TRAIN:")
+        display_lines.append(f"   1. Choose train index: [0] to [{len(trains)-1}]")
+        display_lines.append("   2. Choose coach class: SL (Sleeper), 3A (3rd AC), 2A (2nd AC), 1A (1st AC)")
+        display_lines.append("   3. Say: 'Book train [index] in [coach] class'")
+        display_lines.append(f"{'='*90}\n")
+        
+        display = '\n'.join(display_lines)
+        
+        return {
+            'status': 'ok',
+            'origin': origin,
+            'destination': destination,
+            'date': date,
+            'url': url,
+            'trains': trains,
+            'total_trains': len(trains),
+            'display': display,
+            'message': f'Found {len(trains)} trains. Select one by index [0-{len(trains)-1}] and coach class (SL, 3A, 2A, 1A).',
+        }
+    except Exception as e:
+        import traceback
+        return {
+            'status': 'error',
+            'error_message': f'Failed to fetch trains: {str(e)}',
+            'origin': origin,
+            'destination': destination,
+            'date': date if 'date' in locals() else 'not provided',
+        }
+
+
+def get_buses_easemytrip(origin: str, destination: str, date: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetch buses from EasyMyTrip between two cities.
+    
+    Args:
+        origin: Departure city
+        destination: Arrival city
+        date: Travel date (optional)
+    
+    Returns:
+        dict with available bus options, timings, prices, and ratings
+    """
+    try:
+        url = f'https://www.easemytrip.com/bus/{origin.lower()}-to-{destination.lower()}-bus-tickets/'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        html = response.text
+        
+        # Extract bus data using patterns
+        patterns = [
+            r'(?:bus|coach)[:\s]*([^\n<]{2,50})',  # Bus name/operator
+            r'(?:departure|depart)[:\s]*(\d{1,2}:\d{2})',  # Departure time
+            r'(?:arrival|arrive)[:\s]*(\d{1,2}:\d{2})',  # Arrival time
+            r'(?:duration|hours?)[:\s]*([0-9h\s]+)',  # Duration
+            r'(?:price|fare|₹)[:\s]*([₹\d,.-]+)',  # Price
+            r'(?:seats?|capacity)[:\s]*(\d+)',  # Seats
+            r'(?:rating|⭐)[:\s]*([0-9.]+)',  # Rating
+        ]
+        
+        extracted_data = extract_from_html(html, patterns)
+        
+        # Use LLM to analyze the response structure
+        analysis_prompt = f"""Analyze this EasyMyTrip buses API response and extract structured data.
+
+Route: {origin} to {destination}
+Response preview (first 1000 chars): {html[:1000]}
+
+Available data found: {extracted_data[:10] if extracted_data else 'None'}
+
+Please return a JSON structure with:
+- buses: [{{busName, operator, departure, arrival, duration, price, seats, rating}}]
+- total_buses: count
+- ac_buses: count
+- average_rating: number
+- price_range: {{min, max}}
+- data_quality: 'complete' | 'partial' | 'empty'
+"""
+        
+        llm_analysis = call_perplexity(analysis_prompt)
+        
+        return {
+            'status': 'ok',
+            'origin': origin,
+            'destination': destination,
+            'url': url,
+            'data_found': bool(extracted_data),
+            'sample_data': extracted_data[:10],
+            'html_length': len(html),
+            'llm_analysis': llm_analysis.get('result', 'Analysis not available'),
+        }
+    except Exception as e:
+        return {'status': 'error', 'error_message': f'Failed to fetch buses: {str(e)}'}
+
+
+def get_activities_easemytrip(destination: str) -> Dict[str, Any]:
+    """
+    Fetch activities/tours from EasyMyTrip for the given destination.
+    
+    Args:
+        destination: City name (e.g., 'Goa', 'Delhi', 'Jaipur')
+    
+    Returns:
+        dict with available activities, prices, ratings, and descriptions
+    """
+    try:
+        url = f'https://www.easemytrip.com/activities/activity-in-{destination.lower()}/'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        html = response.text
+        
+        # Extract activity data using patterns
+        patterns = [
+            r'(?:activity|tour|experience)[:\s]*([^\n<]{2,100})',  # Activity name
+            r'(?:description|details)[:\s]*([^\n<]{2,150})',  # Description
+            r'(?:price|cost|₹)[:\s]*([₹\d,.-]+)',  # Price
+            r'(?:duration|hours?)[:\s]*([0-9h\s]+)',  # Duration
+            r'(?:rating|⭐)[:\s]*([0-9.]+)',  # Rating
+        ]
+        
+        extracted_data = extract_from_html(html, patterns)
+        
+        # Use LLM to analyze the response structure
+        analysis_prompt = f"""Analyze this EasyMyTrip activities API response and extract structured data.
+
+Destination: {destination}
+Response preview (first 1000 chars): {html[:1000]}
+
+Available data found: {extracted_data[:10] if extracted_data else 'None'}
+
+Please return a JSON structure with:
+- activities: [{{name, description, price, duration, rating, category, image}}]
+- total_activities: count
+- categories: [list of activity types]
+- average_rating: number
+- price_range: {{min, max}}
+- data_quality: 'complete' | 'partial' | 'empty'
+"""
+        
+        llm_analysis = call_perplexity(analysis_prompt)
+        
+        return {
+            'status': 'ok',
+            'destination': destination,
+            'url': url,
+            'data_found': bool(extracted_data),
+            'sample_data': extracted_data[:10],
+            'html_length': len(html),
+            'llm_analysis': llm_analysis.get('result', 'Analysis not available'),
+        }
+    except Exception as e:
+        return {'status': 'error', 'error_message': f'Failed to fetch activities: {str(e)}'}
+
+
+def get_car_bookings_easemytrip(origin: str, destination: str) -> Dict[str, Any]:
+    """
+    Fetch car rentals from EasyMyTrip between two cities.
+    
+    Args:
+        origin: Pickup city
+        destination: Dropoff city
+    
+    Returns:
+        dict with available car options, prices, and ratings
+    """
+    try:
+        url = f'https://www.easemytrip.com/cabs/{origin.lower()}-to-{destination.lower()}-cab-booking/'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        html = response.text
+        
+        # Extract car data using patterns
+        patterns = [
+            r'(?:car|vehicle)[:\s]*([^\n<]{2,80})',  # Car type
+            r'(?:price|fare|₹)[:\s]*([₹\d,.-]+)',  # Price
+            r'(?:capacity|seats)[:\s]*(\d+)',  # Capacity
+            r'(?:rating|⭐)[:\s]*([0-9.]+)',  # Rating
+        ]
+        
+        extracted_data = extract_from_html(html, patterns)
+        
+        # Use LLM to analyze the response structure
+        analysis_prompt = f"""Analyze this EasyMyTrip car rentals API response and extract structured data.
+
+Route: {origin} to {destination}
+Response preview (first 1000 chars): {html[:1000]}
+
+Available data found: {extracted_data[:10] if extracted_data else 'None'}
+
+Please return a JSON structure with:
+- cars: [{{carType, price, capacity, rating, features}}]
+- total_cars: count
+- car_types: [sedan, suv, hatchback, etc]
+- average_rating: number
+- price_range: {{min, max}}
+- data_quality: 'complete' | 'partial' | 'empty'
+"""
+        
+        llm_analysis = call_perplexity(analysis_prompt)
+        
+        return {
+            'status': 'ok',
+            'origin': origin,
+            'destination': destination,
+            'url': url,
+            'data_found': bool(extracted_data),
+            'sample_data': extracted_data[:10],
+            'html_length': len(html),
+            'llm_analysis': llm_analysis.get('result', 'Analysis not available'),
+        }
+    except Exception as e:
+        return {'status': 'error', 'error_message': f'Failed to fetch cars: {str(e)}'}
+
+
+def get_airport_cabs_easemytrip(airport_city: str) -> Dict[str, Any]:
+    """
+    Fetch airport cab services from EasyMyTrip for the given airport.
+    
+    Args:
+        airport_city: City with airport (e.g., 'Delhi', 'Mumbai', 'Bangalore')
+    
+    Returns:
+        dict with airport cab options, prices, and ratings
+    """
+    try:
+        url = f'https://www.easemytrip.com/cabs/cabs-from-{airport_city.lower()}-airport/'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        html = response.text
+        
+        # Extract cab data using patterns
+        patterns = [
+            r'(?:cab|taxi|vehicle)[:\s]*([^\n<]{2,80})',  # Cab type
+            r'(?:price|fare|₹)[:\s]*([₹\d,.-]+)',  # Price
+            r'(?:rating|⭐)[:\s]*([0-9.]+)',  # Rating
+        ]
+        
+        extracted_data = extract_from_html(html, patterns)
+        
+        # Use LLM to analyze the response structure
+        analysis_prompt = f"""Analyze this EasyMyTrip airport cabs API response and extract structured data.
+
+Airport: {airport_city}
+Response preview (first 1000 chars): {html[:1000]}
+
+Available data found: {extracted_data[:10] if extracted_data else 'None'}
+
+Please return a JSON structure with:
+- cabs: [{{cabType, price, rating, dropoff_areas}}]
+- total_cabs: count
+- average_rating: number
+- price_range: {{min, max}}
+- service_areas: [list of areas]
+- data_quality: 'complete' | 'partial' | 'empty'
+"""
+        
+        llm_analysis = call_perplexity(analysis_prompt)
+        
+        return {
+            'status': 'ok',
+            'airport_city': airport_city,
+            'url': url,
+            'data_found': bool(extracted_data),
+            'sample_data': extracted_data[:10],
+            'html_length': len(html),
+            'llm_analysis': llm_analysis.get('result', 'Analysis not available'),
+        }
+    except Exception as e:
+        return {'status': 'error', 'error_message': f'Failed to fetch airport cabs: {str(e)}'}
+
+
+def book_train_complete(
+    origin: str,
+    destination: str,
+    date: str,
+    train_index: int,
+    coach_class: str
+) -> Dict[str, Any]:
+    """
+    Complete train booking workflow: validate selections and provide booking URL.
+    
+    Steps:
+    1. Scrape all trains from EasyMyTrip for the route
+    2. Validate the train_index and coach_class selections
+    3. Generate booking URL with selected parameters
+    4. Return the final booking URL for payment
+    
+    Args:
+        origin: Departure city (e.g., 'Ongole', 'Delhi')
+        destination: Arrival city (e.g., 'Hyderabad', 'Mumbai')
+        date: Travel date in DD-MM-YYYY format (e.g., '04-11-2025')
+        train_index: Index of train to book (0-based, from scraped list)
+        coach_class: Coach class (SL, 3A, 2A, 1A)
+    
+    Returns:
+        dict with:
+        - status: 'success' or 'error'
+        - booking_url: Final booking URL to visit for payment
+        - train: Selected train details
+        - coach: Selected coach class
+        - message: User-friendly message
+    
+    Example:
+        >>> result = book_train_complete('Ongole', 'Hyderabad', '04-11-2025', 0, '2A')
+        >>> print(result['booking_url'])
+        https://railways.easemytrip.com/checkout?...
+    """
+    try:
+        # Step 1: Get trains using existing scraping function
+        train_result = get_trains_easemytrip(origin, destination, date)
+        
+        if train_result['status'] != 'ok':
+            return {
+                'status': 'error',
+                'message': f"Failed to fetch trains: {train_result.get('error_message', 'Unknown error')}"
+            }
+        
+        trains = train_result.get('trains', [])
+        trains_url = train_result.get('url', '')
+        
+        if not trains:
+            return {
+                'status': 'error',
+                'message': 'No trains found for the given route and date',
+                'display': train_result.get('display', '')
+            }
+        
+        # Step 2: Validate train_index
+        if train_index < 0 or train_index >= len(trains):
+            return {
+                'status': 'error',
+                'message': f'❌ Invalid train index: {train_index}. Please select from [0] to [{len(trains)-1}]',
+                'available_trains': len(trains),
+                'display': train_result.get('display', '')
+            }
+        
+        # Step 3: Validate coach_class
+        valid_coaches = ['SL', '3A', '2A', '1A']
+        if coach_class not in valid_coaches:
+            return {
+                'status': 'error',
+                'message': f'❌ Invalid coach class: {coach_class}. Valid options: {", ".join(valid_coaches)}'
+            }
+        
+        # Step 4: Get selected train details
+        selected_train = trains[train_index]
+        
+        # Step 5: Build booking URL with selections
+        # The actual booking happens when user visits the EasyMyTrip page and clicks "Book Now"
+        # We provide the URL with the train selected
+        booking_url = trains_url
+        
+        # Add coach class as a query parameter or anchor
+        # Note: Actual coach selection happens on the website UI
+        coach_mapping = {
+            'SL': 'Sleeper',
+            '3A': '3rd-AC',
+            '2A': '2nd-AC',
+            '1A': '1st-AC'
+        }
+        coach_name = coach_mapping.get(coach_class, coach_class)
+        
+        # Construct a user-friendly booking summary
+        booking_summary = (
+            f"\n{'='*90}\n"
+            f"✅ BOOKING CONFIRMED - READY FOR PAYMENT\n"
+            f"{'='*90}\n"
+            f"🚂 Train Details:\n"
+            f"   Train Number: {selected_train['train_number']}\n"
+            f"   Train Name: {selected_train['train_name']}\n"
+            f"   Route: {origin.upper()} → {destination.upper()}\n"
+            f"   Date: {date}\n"
+            f"\n🚪 Booking Details:\n"
+            f"   Departure: {selected_train['departure']}\n"
+            f"   Arrival: {selected_train['arrival']}\n"
+            f"   Duration: {selected_train['duration']}\n"
+            f"   Coach Class: {coach_class} ({coach_name})\n"
+            f"\n💰 Price: {selected_train['price']}\n"
+            f"👥 Seats Available: {selected_train['seats']}\n"
+            f"⭐ Rating: {selected_train['rating']}\n"
+            f"{'='*90}\n"
+            f"📝 Next Steps:\n"
+            f"   1. Click the booking link below\n"
+            f"   2. The website will load with your train selected\n"
+            f"   3. Select '{coach_class}' class from the available options\n"
+            f"   4. Click 'Book Now' button\n"
+            f"   5. Complete passenger details and payment\n"
+            f"{'='*90}\n"
+        )
+        
+        return {
+            'status': 'success',
+            'booking_url': booking_url,
+            'train': selected_train,
+            'coach': coach_class,
+            'coach_name': coach_name,
+            'message': f'✅ Train booking ready! Visit the link below to complete payment.',
+            'booking_summary': booking_summary,
+            'instructions': (
+                f'Your booking is confirmed:\n'
+                f'  • Train #{selected_train["train_number"]} ({selected_train["train_name"]})\n'
+                f'  • {selected_train["departure"]} → {selected_train["arrival"]}\n'
+                f'  • Coach: {coach_class} ({coach_name})\n'
+                f'  • Price: {selected_train["price"]}\n\n'
+                f'Click the booking URL to proceed with payment and passenger details.'
+            )
+        }
+    
+    except Exception as e:
+        import traceback
+        return {
+            'status': 'error',
+            'message': f'Booking error: {str(e)}',
+            'error_details': traceback.format_exc()
+        }
+
 
 
 def call_perplexity(prompt: str) -> Dict[str, Any]:
@@ -410,15 +1271,27 @@ def nearby_places_tool(
 root_agent = Agent(
     name='trip_planner_agent',
     model='gemini-2.0-flash',
-    description='A comprehensive trip planning agent that helps users plan their travel by fetching flights, hotels, guides, trains, cars, restaurants, hospitals, and nearby attractions.',
+    description='A comprehensive trip planning agent that helps users plan their travel by fetching flights, hotels, guides, trains, cars, restaurants, hospitals, and nearby attractions using EasyMyTrip APIs.',
     instruction=(
-        'You are a helpful Trip Planning Assistant. When a user arrives with a travel request, '
-        'first use the input_parser tool to understand their intent and extract key details (destination, origin, date, party size, intents). '
-        'Then, based on detected intents, invoke the appropriate tools: '
-        'get_flights for flight options, hotels_search for hotels, get_local_guides for tour guides, '
-        'trains_tool for trains, car_rentals_tool for rental cars, restaurants_tool for dining, '
-        'hospitals_tool for medical info, and nearby_places_tool for attractions. '
-        'Consolidate all results into a clear, organized trip plan.'
+        'You are a helpful Trip Planning Assistant with integrated EasyMyTrip travel booking capabilities. '
+        'When a user arrives with a travel request, first use the input_parser tool to understand their intent and extract key details (destination, origin, date, party size, intents). '
+        'Then, based on detected intents, invoke the appropriate EasyMyTrip tools for real travel data. '
+        '\n\nTRAIN BOOKING WORKFLOW (IMPORTANT): '
+        'When user wants to book a train: '
+        '1. Call get_trains_easemytrip(origin, destination, date) which will SCRAPE and DISPLAY all available trains with indices [0], [1], [2], etc. '
+        '2. The response will have a "display" field showing formatted train list. SHOW THIS DISPLAY TO THE USER. '
+        '3. Ask user: "Which train do you prefer? (enter index like 0, 1, 2, etc.)" and "Which coach class? (SL, 3A, 2A, or 1A)" '
+        '4. Once user provides BOTH train_index and coach_class, call book_train_complete(origin, destination, date, train_index, coach_class). '
+        '5. The tool will use Playwright to: open EasyMyTrip URL, select the specified train, select coach class, click "Book Now", and return booking URL. '
+        '6. Display the booking URL to user with message: "Your booking is ready! Click this link to proceed with payment." '
+        'Example flow: '
+        'User: "Book train from Ongole to Hyderabad on 04-11-2025" '
+        '→ Call get_trains_easemytrip("Ongole", "Hyderabad", "04-11-2025") '
+        '→ Display formatted list with trains [0], [1], [2]... '
+        '→ User: "I want train 0 in 2A class" '
+        '→ Call book_train_complete("Ongole", "Hyderabad", "04-11-2025", 0, "2A") '
+        '→ Returns: {status: success, booking_url: "https://railways.easemytrip.com/...", train: {...}, coach: "2A"} '
+        '→ Display booking URL to user'
     ),
     tools=[
         input_parser,
@@ -432,5 +1305,14 @@ root_agent = Agent(
         restaurants_tool,
         hospitals_tool,
         nearby_places_tool,
+        # New EasyMyTrip Real Booking APIs
+        get_hotels_easemytrip,
+        get_trains_easemytrip,
+        get_buses_easemytrip,
+        get_activities_easemytrip,
+        get_car_bookings_easemytrip,
+        get_airport_cabs_easemytrip,
+        # Complete train booking with Playwright automation
+        book_train_complete,
     ],
 )

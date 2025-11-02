@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Compass, Heart, CreditCard, Settings, Map } from 'lucide-react';
+import { Compass, Heart, CreditCard, Settings, Map, Ticket, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,16 @@ export default function Sidebar() {
       icon: Map,
       label: 'My Travel',
       href: '/planner',
+    },
+    {
+      icon: Sparkles,
+      label: 'AIMarg',
+      href: '/ai-marg',
+    },
+    {
+      icon: Ticket,
+      label: 'Bookings',
+      href: '/bookings',
     },
     {
       icon: Heart,
