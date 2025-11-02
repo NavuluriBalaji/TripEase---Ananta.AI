@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Chrome, Facebook, Github, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
@@ -14,6 +15,9 @@ import {
   signInWithGithub,
 } from '@/lib/auth-utils';
 import { useAuth } from '@/hooks/use-auth';
+
+// Define the redirect URL as a constant to avoid repetition
+const REDIRECT_URL = process.env.NEXT_PUBLIC_REDIRECT_URL || 'https://trip-ease-ananta-ai.vercel.app/';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,6 +37,22 @@ export default function LoginPage() {
     }
   }, [authLoading, currentUser, router]);
 
+  // Reset error when user changes input
+  useEffect(() => {
+    if (error) setError('');
+  }, [email, password, error]);
+
+  const handleSignInSuccess = () => {
+    // Redirect to external shell after successful login
+    window.location.replace(REDIRECT_URL);
+  };
+
+  const handleSignInError = (err: unknown, provider: string) => {
+    const errorMessage = err instanceof Error ? err.message : `Failed to sign in with ${provider}`;
+    setError(errorMessage);
+    setLoading(false);
+  };
+
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -43,13 +63,10 @@ export default function LoginPage() {
         throw new Error('Please fill in all fields');
       }
 
-  await signInWithEmail(email, password);
-  // Redirect to external shell after successful login
-  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
+      await signInWithEmail(email, password);
+      handleSignInSuccess();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in';
-      setError(errorMessage);
-      setLoading(false);
+      handleSignInError(err, 'email');
     }
   };
 
@@ -58,13 +75,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-  await signInWithGoogle();
-  // Redirect to external shell after successful login
-  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
+      await signInWithGoogle();
+      handleSignInSuccess();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with Google';
-      setError(errorMessage);
-      setLoading(false);
+      handleSignInError(err, 'Google');
     }
   };
 
@@ -73,13 +87,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-  await signInWithFacebook();
-  // Redirect to external shell after successful login
-  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
+      await signInWithFacebook();
+      handleSignInSuccess();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with Facebook';
-      setError(errorMessage);
-      setLoading(false);
+      handleSignInError(err, 'Facebook');
     }
   };
 
@@ -88,21 +99,36 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-  await signInWithGithub();
-  // Redirect to external shell after successful login
-  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
+      await signInWithGithub();
+      handleSignInSuccess();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with GitHub';
-      setError(errorMessage);
-      setLoading(false);
+      handleSignInError(err, 'GitHub');
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Card */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
+      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-stretch">
+        {/* Left: Illustration (hidden on small screens) */}
+        <div className="relative hidden md:block rounded-xl overflow-hidden shadow-lg">
+          <Image
+            src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop"
+            alt="Explore the world with TripEase"
+            fill
+            priority
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+          <div className="absolute bottom-4 left-4 right-4 text-white">
+            <h2 className="text-2xl font-semibold drop-shadow">Plan smarter. Travel better.</h2>
+            <p className="text-sm text-white/90 mt-1">Hotels, activities, rides and more—organized in one place.</p>
+          </div>
+        </div>
+
+        {/* Right: Login Card */}
+        <div className="w-full max-w-md md:max-w-none md:w-auto md:mx-0 mx-auto">
+          {/* Card */}
+          <div className="bg-white rounded-lg shadow-lg p-8">
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
@@ -133,6 +159,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
                   className="pl-10 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  autoComplete="email"
                 />
               </div>
             </div>
@@ -154,11 +181,13 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
                   className="pl-10 pr-10 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -236,20 +265,24 @@ export default function LoginPage() {
                 Sign up here
               </Link>
             </p>
+            <p className="text-sm text-gray-500 mt-2">
+              If screen isn't redirecting, Try refreshing the page.
+            </p>
           </div>
-        </div>
 
-        {/* Footer Text */}
-        <p className="text-center text-gray-600 text-sm mt-8">
-          By signing in, you agree to our{' '}
-          <Link href="/terms" className="text-blue-600 hover:text-blue-700">
-            Terms of Service
-          </Link>{' '}
-          and{' '}
-          <Link href="/privacy" className="text-blue-600 hover:text-blue-700">
-            Privacy Policy
-          </Link>
-        </p>
+          {/* Footer Text */}
+          <p className="text-center text-gray-600 text-sm mt-8">
+            By signing in, you agree to our{' '}
+            <Link href="/terms" className="text-blue-600 hover:text-blue-700">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link href="/privacy" className="text-blue-600 hover:text-blue-700">
+              Privacy Policy
+            </Link>
+          </p>
+        </div>
+      </div>
       </div>
     </div>
   );

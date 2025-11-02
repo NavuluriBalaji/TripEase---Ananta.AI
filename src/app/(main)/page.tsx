@@ -4,6 +4,9 @@ import Image from 'next/image';
 import { MapPin, Calendar, Users, TrendingUp, Loader, AlertCircle, CheckCircle, ExternalLink, Navigation } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/use-auth';
 import { useState, useEffect } from 'react';
 
@@ -31,6 +34,14 @@ export default function HomePage() {
   const [tripPlan, setTripPlan] = useState<any>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+
+  // Booking confirmation modal state
+  const [showBookModal, setShowBookModal] = useState(false);
+  const [selectedTripForBooking, setSelectedTripForBooking] = useState<any | null>(null);
+  const [bookingEmail, setBookingEmail] = useState<string>(userProfile?.email || currentUser?.email || '');
+  const [sendingBookingEmail, setSendingBookingEmail] = useState(false);
+  const [bookingEmailError, setBookingEmailError] = useState<string | null>(null);
+  const [bookingEmailSuccess, setBookingEmailSuccess] = useState<string | null>(null);
 
   // Mock data for dashboard stats
   const stats = [
@@ -66,18 +77,18 @@ export default function HomePage() {
   latitude: 36.3932,
   longitude: 25.4615,
 },
-{
-  id: 4,
-  title: 'Kyoto Bamboo Forest',
-  description: 'Tranquil paths surrounded by towering bamboo',
-  date: '21 Oct - 25 Oct',
-  duration: '5 Days',
-  image: 'https://images.unsplash.com/photo-1526481280691-9065fcb91f5d?w=400&h=250&fit=crop',
-  travelers: 1,
-  destination: 'Kyoto, Japan',
-  latitude: 35.0116,
-  longitude: 135.7681,
-},
+// {
+//   id: 4,
+//   title: 'Kyoto Bamboo Forest',
+//   description: 'Tranquil paths surrounded by towering bamboo',
+//   date: '21 Oct - 25 Oct',
+//   duration: '5 Days',
+//   image: 'https://images.unsplash.com/photo-1526481280691-9065fcb91f5d?w=400&h=250&fit=crop',
+//   travelers: 1,
+//   destination: 'Kyoto, Japan',
+//   latitude: 35.0116,
+//   longitude: 135.7681,
+// },
 {
   id: 5,
   title: 'Banff National Park',
@@ -318,18 +329,64 @@ export default function HomePage() {
     fetchTripsForCategory(categoryId);
   };
 
-  // Book trip
+  // Book trip: open modal and prepare to email
   const handleBookTrip = async (tripId: string, tripTitle: string) => {
     setBookingTrip(tripId);
+    setBookingEmailError(null);
+    setBookingEmailSuccess(null);
     try {
-      // Simulate booking
-      setTimeout(() => {
-        alert(`✅ Booking confirmed for: ${tripTitle}`);
-        setBookingTrip(null);
-      }, 1500);
+      const trip = categoryTrips.find((t: any) => String(t.id) === String(tripId));
+      setSelectedTripForBooking(trip || { id: tripId, title: tripTitle });
+      setShowBookModal(true);
     } catch (error) {
-      console.error('Error booking trip:', error);
+      console.error('Error preparing booking:', error);
+    } finally {
       setBookingTrip(null);
+    }
+  };
+
+  const confirmAndSendBookingEmail = async () => {
+    if (!bookingEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookingEmail)) {
+      setBookingEmailError('Please enter a valid email address.');
+      return;
+    }
+    setBookingEmailError(null);
+    setSendingBookingEmail(true);
+    setBookingEmailSuccess(null);
+    try {
+      const trip = selectedTripForBooking;
+      const bookingPayload = {
+        id: trip?.id,
+        title: trip?.title,
+        destination: trip?.destination,
+        duration: trip?.duration,
+        budget: trip?.budget,
+        rating: trip?.rating,
+      };
+
+      const res = await fetch('/api/send-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: bookingEmail,
+          subject: `Your TripEase booking: ${trip?.title || 'Trip'}`,
+          booking: bookingPayload,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to send booking email');
+      }
+
+      const data = await res.json();
+      setBookingEmailSuccess('Booking confirmation sent successfully.');
+      // Optionally close modal after a short delay
+      // setTimeout(() => setShowBookModal(false), 1200);
+    } catch (e: any) {
+      setBookingEmailError(e?.message || 'Failed to send booking email.');
+    } finally {
+      setSendingBookingEmail(false);
     }
   };
 
@@ -614,7 +671,7 @@ export default function HomePage() {
                       {bookingTrip === trip.id ? (
                         <>
                           <Loader className="h-4 w-4 mr-2 animate-spin" />
-                          Booking...
+                          Preparing...
                         </>
                       ) : (
                         '✅ Book'
@@ -674,9 +731,9 @@ export default function HomePage() {
               <h2 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
                 Best Ever Trips On-Cards
               </h2>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold" style={{ fontFamily: 'Poppins, sans-serif' }}>
+              {/* <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold" style={{ fontFamily: 'Poppins, sans-serif' }}>
                 See All
-              </Button>
+              </Button> */}
             </div>
             <p className="text-base text-gray-600 mb-6 font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>
               Remember your upcoming trips!
@@ -794,10 +851,10 @@ export default function HomePage() {
           <div>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
-                Doing Trips
+                Suggestions
               </h2>
               <Button variant="ghost" className="text-blue-600 hover:bg-blue-100 font-semibold" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                See All
+                {/* See All */}
               </Button>
             </div>
             <div className="space-y-3">
@@ -858,6 +915,80 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Trip Planning Modal - Loading State */}
+      {/* Booking Confirmation Modal */}
+      <Dialog open={showBookModal} onOpenChange={setShowBookModal}>
+        <DialogContent className="sm:max-w-md">
+          {/* Hidden title for accessibility tools that require it */}
+          <DialogHeader>
+            <DialogTitle className="sr-only">Booking Confirmation</DialogTitle>
+            <DialogDescription className="sr-only">Confirm your booking and receive an email confirmation.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-gray-500">You are booking</p>
+              <h3 className="text-xl font-semibold text-gray-900">{selectedTripForBooking?.title || 'Selected Trip'}</h3>
+              <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                {selectedTripForBooking?.destination && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-gray-500">Destination</p>
+                    <p className="font-medium">{selectedTripForBooking.destination}</p>
+                  </div>
+                )}
+                {selectedTripForBooking?.duration && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-gray-500">Duration</p>
+                    <p className="font-medium">{selectedTripForBooking.duration}</p>
+                  </div>
+                )}
+                {selectedTripForBooking?.budget && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-gray-500">Budget</p>
+                    <p className="font-medium">{selectedTripForBooking.budget}</p>
+                  </div>
+                )}
+                {selectedTripForBooking?.rating && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-gray-500">Rating</p>
+                    <p className="font-medium">⭐ {selectedTripForBooking.rating}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="booking-email">Send confirmation to</Label>
+              <Input
+                id="booking-email"
+                type="email"
+                value={bookingEmail}
+                onChange={(e) => setBookingEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+              {bookingEmailError && <p className="text-sm text-red-600">{bookingEmailError}</p>}
+              {bookingEmailSuccess && <p className="text-sm text-green-600">{bookingEmailSuccess}</p>}
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowBookModal(false)} disabled={sendingBookingEmail}>
+              Cancel
+            </Button>
+            <Button onClick={confirmAndSendBookingEmail} disabled={sendingBookingEmail} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {sendingBookingEmail ? (
+                <>
+                  <Loader className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                'Confirm & Send Email'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Trip Planning Modal - Loading State */}
       {showPlanModal && loadingPlan && (

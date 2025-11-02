@@ -4,6 +4,12 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { db } from '@/lib/firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import {
   Hotel,
   Train,
@@ -39,6 +45,13 @@ export const TravelBookingResults = ({
   destination,
 }: TravelBookingResultsProps) => {
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [openMock, setOpenMock] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [mockItem, setMockItem] = useState<any>(null);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
+  const { toast } = useToast();
+  const { currentUser } = useAuth();
 
   // Helper function to safely format fetch time
   const formatFetchTime = (fetchedAt: Date | string) => {
@@ -64,6 +77,84 @@ export const TravelBookingResults = ({
         <span className="text-sm font-semibold">{rating}</span>
       </div>
     );
+  };
+
+  const openMockDialog = (item: any) => {
+    setMockItem(item);
+    setSendResult(null);
+    setOpenMock(true);
+  };
+
+  const submitMockBooking = async () => {
+    if (!recipientEmail) {
+      setSendResult('Please enter recipient email');
+      return;
+    }
+    setSending(true);
+    setSendResult(null);
+    try {
+      const res = await fetch('/api/send-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipientEmail,
+          subject: 'TripEase Booking Confirmation (Mock)',
+          booking: mockItem,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to send');
+      setSendResult('Confirmation sent! Check your inbox' + (json.filePath ? ` (saved to ${json.filePath})` : ''));
+    } catch (e: any) {
+      setSendResult(e?.message || 'Failed to send');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const confirmBooking = async (item: any) => {
+    try {
+      const doc = await addDoc(collection(db, 'bookings'), {
+        userId: currentUser?.uid || null,
+        userEmail: currentUser?.email || null,
+        itemType: item?.type || 'unknown',
+        title: item?.title || item?.name || 'Booking',
+        origin,
+        destination,
+        price: item?.price || null,
+        providerUrl: item?.url || null,
+        payload: item || null,
+        status: 'confirmed',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Try to email the user automatically if we have an email
+      const toEmail = currentUser?.email || recipientEmail;
+      if (toEmail) {
+        try {
+          await fetch('/api/send-booking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: toEmail,
+              subject: 'TripEase Booking Confirmation',
+              booking: { id: doc.id, ...item, origin, destination },
+            }),
+          });
+        } catch {}
+      }
+
+      toast({
+        title: 'Booking confirmed',
+        description: `${item?.title || item?.name || 'Your booking'} is confirmed.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Booking failed',
+        description: e?.message || 'Please try again.',
+      });
+    }
   };
 
   return (
@@ -170,6 +261,14 @@ export const TravelBookingResults = ({
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </Button>
                   </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); confirmBooking({ type: 'hotel', title: hotel.name, ...hotel }); }}>
+                      Confirm Booking
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openMockDialog({ type: 'hotel', title: hotel.name, ...hotel }); }}>
+                      Mock Book & Email
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -230,6 +329,14 @@ export const TravelBookingResults = ({
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </Button>
                   </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); confirmBooking({ type: 'train', title: train.trainName, ...train }); }}>
+                      Confirm Booking
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openMockDialog({ type: 'train', title: train.trainName, ...train }); }}>
+                      Mock Book & Email
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -288,6 +395,14 @@ export const TravelBookingResults = ({
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </Button>
                   </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); confirmBooking({ type: 'bus', title: bus.busName, ...bus }); }}>
+                      Confirm Booking
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openMockDialog({ type: 'bus', title: bus.busName, ...bus }); }}>
+                      Mock Book & Email
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -348,6 +463,14 @@ export const TravelBookingResults = ({
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </Button>
                   </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); confirmBooking({ type: 'activity', title: activity.name, ...activity }); }}>
+                      Confirm Booking
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openMockDialog({ type: 'activity', title: activity.name, ...activity }); }}>
+                      Mock Book & Email
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -397,6 +520,14 @@ export const TravelBookingResults = ({
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </Button>
                   </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); confirmBooking({ type: 'car', title: car.carType, ...car }); }}>
+                      Confirm Booking
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openMockDialog({ type: 'car', title: car.carType, ...car }); }}>
+                      Mock Book & Email
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -447,12 +578,58 @@ export const TravelBookingResults = ({
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </Button>
                   </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="default" size="sm" onClick={(e) => { e.stopPropagation(); confirmBooking({ type: 'airport', title: airport.carType, ...airport }); }}>
+                      Confirm Booking
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openMockDialog({ type: 'airport', title: airport.carType, ...airport }); }}>
+                      Mock Book & Email
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Mock Booking Dialog */}
+      <Dialog open={openMock} onOpenChange={setOpenMock}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Booking Confirmation</DialogTitle>
+            <DialogDescription>
+              This is a mock confirmation. Enter the recipient email to send details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <div className="text-sm text-gray-600">Booking</div>
+              <div className="font-medium">{mockItem?.title || mockItem?.name || 'Selected item'}</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Recipient Email</div>
+              <Input
+                type="email"
+                placeholder="user@example.com"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+              />
+            </div>
+            {sendResult && (
+              <div className={`text-sm ${sendResult.startsWith('Confirmation') ? 'text-green-600' : 'text-red-600'}`}>
+                {sendResult}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpenMock(false)}>Close</Button>
+            <Button onClick={submitMockBooking} disabled={sending}>
+              {sending ? 'Sending…' : 'Send Email'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

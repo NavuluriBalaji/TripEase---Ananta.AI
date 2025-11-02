@@ -17,6 +17,7 @@ export async function sendBookingEmail(to: string, subject: string, html: string
   const pass = process.env.SMTP_PASS;
   const from = process.env.MAIL_FROM || user || 'no-reply@tripease.local';
 
+  // Primary: explicit SMTP config
   if (host && user && pass) {
     try {
       const nodemailer = await import('nodemailer');
@@ -30,6 +31,25 @@ export async function sendBookingEmail(to: string, subject: string, html: string
       return { success: true, transport: 'smtp', id: info.messageId };
     } catch (e: any) {
       console.warn('SMTP send failed, falling back to file outbox.', e?.message || e);
+      // Fall through to file outbox
+    }
+  }
+
+  // Secondary: Gmail via EMAIL_USER / EMAIL_PASS (app password)
+  const gmailUser = process.env.EMAIL_USER;
+  const gmailPass = process.env.EMAIL_PASS;
+  const gmailFrom = process.env.MAIL_FROM || process.env.EMAIL_FROM || gmailUser;
+  if (gmailUser && gmailPass) {
+    try {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: gmailUser, pass: gmailPass },
+      });
+      const info = await transporter.sendMail({ from: gmailFrom, to, subject, html, text });
+      return { success: true, transport: 'smtp', id: info.messageId };
+    } catch (e: any) {
+      console.warn('Gmail send failed, falling back to file outbox.', e?.message || e);
       // Fall through to file outbox
     }
   }

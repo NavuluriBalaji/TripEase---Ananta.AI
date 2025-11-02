@@ -49,9 +49,9 @@ function makeRandomPayment(i: number): MockPayment {
 
 function formatUsd(n: number) {
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR' }).format(n);
   } catch {
-    return `$${n.toFixed(2)}`;
+    return `₹${n.toFixed(2)}`;
   }
 }
 
