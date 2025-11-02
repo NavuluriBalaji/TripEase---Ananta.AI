@@ -1,0 +1,46 @@
+From: no-reply@tripease.local
+To: balajinbtt@gmail.com
+Subject: Your TripEase booking confirmation (pay_sgamdnfq)
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111">
+        <h2>Thanks for your booking, Balaji!</h2>
+        <p>Here is your confirmation:</p>
+        <ul>
+          <li><strong>[FLIGHT]</strong>  — $0.00 × 1 = <strong>$0.00</strong></li><li><strong>[HOTEL]</strong>  — $0.00 × 1 = <strong>$0.00</strong></li><li><strong>[CAR]</strong>  — $0.00 × 1 = <strong>$0.00</strong></li>
+        </ul>
+        <p>
+          Subtotal: <strong>$0.00</strong><br/>
+          Service fee (2.5%): <strong>$0.00</strong><br/>
+          Taxes (8%): <strong>$0.00</strong><br/>
+          <span style="font-size:1.1em">Total charged: <strong>$0.00</strong></span>
+        </p>
+        <p>
+          Payment ID: <code>pay_sgamdnfq</code><br/>
+          Status: <strong>succeeded</strong>
+        </p>
+        <p>Safe travels and have an amazing trip!<br/>— TripEase Team</p>
+      </div>
+    
+
+<!-- Text alternative -->
+<pre style="white-space:pre-wrap">Hi Balaji,
+
+Thanks for booking with TripEase. Here is your confirmation:
+
+- [FLIGHT]  — $0.00 x 1 = $0.00
+- [HOTEL]  — $0.00 x 1 = $0.00
+- [CAR]  — $0.00 x 1 = $0.00
+
+Subtotal: $0.00
+Service fee (2.5%): $0.00
+Taxes (8%): $0.00
+Total charged: $0.00
+
+Payment ID: pay_sgamdnfq
+Status: succeeded
+
+Safe travels and have an amazing trip!
+— TripEase Team</pre>

@@ -1,0 +1,67 @@
+{
+  "placeholderImages": [
+    {
+      "id": "hero-kyoto",
+      "title": "Kyoto, Japan",
+      "description": "A tranquil temple surrounded by autumn foliage in Kyoto, Japan.",
+      "imageUrl": "https://picsum.photos/seed/kyoto/1600/900",
+      "imageHint": "Kyoto temple"
+    },
+    {
+      "id": "dest-paris",
+      "title": "Paris, France",
+      "description": "The iconic Eiffel Tower standing tall in the city of love.",
+      "imageUrl": "https://picsum.photos/seed/paris/600/400",
+      "imageHint": "Paris eiffel"
+    },
+    {
+      "id": "dest-bora-bora",
+      "title": "Bora Bora",
+      "description": "Overwater bungalows in crystal-clear turquoise lagoons.",
+      "imageUrl": "https://picsum.photos/seed/borabora/600/400",
+      "imageHint": "Bora Bora"
+    },
+    {
+      "id": "dest-alps",
+      "title": "Swiss Alps",
+      "description": "Majestic snow-capped mountains and lush green valleys.",
+      "imageUrl": "https://picsum.photos/seed/alps/600/400",
+      "imageHint": "Swiss Alps"
+    },
+    {
+      "id": "dest-santorini",
+      "title": "Santorini, Greece",
+      "description": "Whitewashed villages clinging to cliffs above the Aegean Sea.",
+      "imageUrl": "https://picsum.photos/seed/santorini/600/400",
+      "imageHint": "Santorini Greece"
+    },
+    {
+      "id": "dest-serengeti",
+      "title": "Serengeti, Tanzania",
+      "description": "Vast plains teeming with wildlife on an African safari.",
+      "imageUrl": "https://picsum.photos/seed/serengeti/600/400",
+      "imageHint": "Serengeti safari"
+    },
+    {
+      "id": "dest-machu-picchu",
+      "title": "Machu Picchu, Peru",
+      "description": "Ancient Incan citadel set high in the Andes Mountains.",
+      "imageUrl": "https://picsum.photos/seed/machupicchu/600/400",
+      "imageHint": "Machu Picchu"
+    },
+    {
+      "id": "dest-venice",
+      "title": "Venice, Italy",
+      "description": "Romantic canals, historic architecture, and gondola rides.",
+      "imageUrl": "https://picsum.photos/seed/venice/600/400",
+      "imageHint": "Venice canals"
+    },
+    {
+      "id": "dest-new-york",
+      "title": "New York, USA",
+      "description": "The bustling metropolis with its iconic skyline and landmarks.",
+      "imageUrl": "https://picsum.photos/seed/newyork/600/400",
+      "imageHint": "New York"
+    }
+  ]
+}
