@@ -45,7 +45,7 @@ export default function LoginPage() {
 
   await signInWithEmail(email, password);
   // Redirect to external shell after successful login
-  window.location.replace('http://localhost:9002/');
+  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in';
       setError(errorMessage);
@@ -60,7 +60,7 @@ export default function LoginPage() {
     try {
   await signInWithGoogle();
   // Redirect to external shell after successful login
-  window.location.replace('http://localhost:9002/');
+  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with Google';
       setError(errorMessage);
@@ -75,7 +75,7 @@ export default function LoginPage() {
     try {
   await signInWithFacebook();
   // Redirect to external shell after successful login
-  window.location.replace('http://localhost:9002/');
+  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with Facebook';
       setError(errorMessage);
@@ -90,7 +90,7 @@ export default function LoginPage() {
     try {
   await signInWithGithub();
   // Redirect to external shell after successful login
-  window.location.replace('http://localhost:9002/');
+  window.location.replace('https://trip-ease-ananta-ai.vercel.app/');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with GitHub';
       setError(errorMessage);
